@@ -1,0 +1,299 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage:
+  wt init <name>
+  wt clone <repo-url>
+  wt [<branch>]
+  wt list
+  wt rm [<branch>] [--force]
+EOF
+}
+
+repo_root() {
+  git rev-parse --git-common-dir >/dev/null 2>&1 || {
+    printf 'Not inside a git repository.\n' >&2
+    return 1
+  }
+  git rev-parse --path-format=absolute --git-common-dir
+}
+
+git_root() {
+  git --git-dir="$WT_REPO_ROOT" "$@"
+}
+
+load_repo() {
+  WT_REPO_ROOT="$(repo_root)"
+  WT_REPO_NAME="$(basename "$WT_REPO_ROOT" .git)"
+  export WT_REPO_ROOT WT_REPO_NAME
+  [[ "$(git_root rev-parse --is-bare-repository)" == true ]] || {
+    printf 'The common Git directory must be bare: %s\n' "$WT_REPO_ROOT" >&2
+    return 1
+  }
+  load_hooks
+}
+
+run_hook() {
+  if declare -F "$1" >/dev/null; then "$1"; fi
+}
+
+load_hooks() {
+  local hooks="${XDG_CONFIG_HOME:-$HOME/.config}/wt/hooks"
+  if [[ -f "$hooks" ]]; then source "$hooks"; fi
+}
+
+fetch_origin() {
+  git_root fetch --prune origin
+  git_root remote set-head origin --auto >/dev/null 2>&1 || true
+}
+
+worktree_for_branch() {
+  git_root worktree list --porcelain | awk -v ref="refs/heads/$1" '
+    /^worktree / { path = substr($0, 10) }
+    $1 == "branch" && $2 == ref { print path; exit }
+  '
+}
+
+branch_exists() {
+  git_root show-ref --verify --quiet "refs/heads/$1"
+}
+
+origin_branch_exists() {
+  git_root show-ref --verify --quiet "refs/remotes/origin/$1"
+}
+
+default_branch() {
+  local head
+  head="$(git_root symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || true)"
+  [[ -n "$head" ]] || {
+    printf 'origin/HEAD is not set.\n' >&2
+    return 1
+  }
+  printf '%s\n' "${head#origin/}"
+}
+
+add_worktree() {
+  local branch="$1" existing path base
+  git check-ref-format --branch "$branch" >/dev/null
+  existing="$(worktree_for_branch "$branch")"
+  if [[ -n "$existing" ]]; then
+    printf '%s\n' "$existing"
+    return 0
+  fi
+
+  path="$WT_REPO_ROOT/$branch"
+  WT_BRANCH="$branch"
+  WT_WORKTREE_PATH="$path"
+  export WT_BRANCH WT_WORKTREE_PATH
+  run_hook wt_pre_add || return 1
+
+  if branch_exists "$branch"; then
+    git_root worktree add "$path" "$branch"
+  elif origin_branch_exists "$branch"; then
+    git_root worktree add --track -b "$branch" "$path" "origin/$branch"
+  else
+    base="$(default_branch)"
+    git_root worktree add -b "$branch" "$path" "origin/$base"
+  fi
+
+  run_hook wt_post_add || return 1
+  printf '%s\n' "$path"
+}
+
+branch_choices() {
+  local checked
+  checked="$(git_root worktree list --porcelain | awk '$1 == "branch" { sub("refs/heads/", "", $2); print $2 }')"
+  {
+    git_root for-each-ref --format='%(refname:strip=2)' refs/heads
+    git_root for-each-ref --format='%(refname:strip=3)' refs/remotes/origin
+  } | awk -v checked="$checked" '
+    BEGIN { n = split(checked, a, "\n"); for (i = 1; i <= n; i++) used[a[i]] = 1 }
+    $0 != "HEAD" && !used[$0] && !seen[$0]++
+  '
+}
+
+pick_branch() {
+  command -v fzf >/dev/null 2>&1 || {
+    printf 'fzf is not installed.\n' >&2
+    return 1
+  }
+  branch_choices | fzf --prompt='Worktree > '
+}
+
+linked_worktrees() {
+  git_root worktree list --porcelain | awk '
+    /^worktree / { path = substr($0, 10) }
+    $1 == "branch" { sub("refs/heads/", "", $2); print $2 "\t" path }
+  '
+}
+
+remove_worktree() {
+  local branch="$1" force="$2" path
+  path="$(worktree_for_branch "$branch")"
+  [[ -n "$path" ]] || {
+    printf 'No worktree found for branch: %s\n' "$branch" >&2
+    return 1
+  }
+  if [[ "$force" != --force && -n "$(git -C "$path" status --porcelain)" ]]; then
+    printf 'Worktree is dirty: %s (use --force)\n' "$path" >&2
+    return 1
+  fi
+
+  WT_BRANCH="$branch"
+  WT_WORKTREE_PATH="$path"
+  export WT_BRANCH WT_WORKTREE_PATH
+  run_hook wt_pre_rm || return 1
+  if [[ "$force" == --force ]]; then
+    git_root worktree remove --force "$path" || return 1
+  else
+    git_root worktree remove "$path" || return 1
+  fi
+  git_root branch -D "$branch" || return 1
+  run_hook wt_post_rm || return 1
+}
+
+remove_picked() {
+  command -v fzf >/dev/null 2>&1 || {
+    printf 'fzf is not installed.\n' >&2
+    return 1
+  }
+  local selected branch _ failed=0
+  selected="$(linked_worktrees | fzf --multi --delimiter=$'\t' --with-nth=1,2 --prompt='Remove worktree > ')" || return 0
+  while IFS=$'\t' read -r branch _; do
+    [[ -n "$branch" ]] || continue
+    remove_worktree "$branch" "$1" || failed=1
+  done <<<"$selected"
+  return "$failed"
+}
+
+init() {
+  local name="$1" root
+  [[ "$name" != -* && "$name" != */* && "$name" != . && "$name" != .. ]] || {
+    printf 'Repository name must be a simple name: %s\n' "$name" >&2
+    return 1
+  }
+  name="${name%.git}"
+  [[ -n "$name" ]] || {
+    printf 'Repository name must not be empty.\n' >&2
+    return 1
+  }
+  root="$HOME/repos/$name.git"
+  WT_REPO_ROOT="$root"
+  WT_REPO_NAME="$name"
+  WT_BRANCH=""
+  WT_WORKTREE_PATH="$root"
+  export WT_REPO_ROOT WT_REPO_NAME WT_BRANCH WT_WORKTREE_PATH
+  load_hooks
+  run_hook wt_pre_init || return 1
+  mkdir -p "$HOME/repos"
+  git init --bare "$root"
+  run_hook wt_post_init
+}
+
+clone() {
+  local url="$1" name root branch
+  [[ "$url" != -* ]] || {
+    printf 'Repository URL must not begin with -: %s\n' "$url" >&2
+    return 1
+  }
+  name="${url%/}"
+  name="${name##*/}"
+  name="${name##*:}"
+  name="${name%.git}"
+  [[ -n "$name" && "$name" != . ]] || {
+    printf 'Cannot determine repository name from: %s\n' "$url" >&2
+    return 1
+  }
+  root="$HOME/repos/$name.git"
+  WT_REPO_ROOT="$root"
+  WT_REPO_NAME="$name"
+  WT_BRANCH=""
+  WT_WORKTREE_PATH="$root"
+  export WT_REPO_ROOT WT_REPO_NAME WT_BRANCH WT_WORKTREE_PATH
+  load_hooks
+  run_hook wt_pre_clone || return 1
+  mkdir -p "$HOME/repos"
+  git clone --bare -- "$url" "$root"
+  git_root config remote.origin.fetch '+refs/heads/*:refs/remotes/origin/*'
+  fetch_origin
+  branch="$(default_branch)"
+  git_root show-ref --verify --quiet "refs/heads/$branch" || git_root branch "$branch" "origin/$branch"
+  git_root branch --set-upstream-to="origin/$branch" "$branch"
+  WT_BRANCH="$branch"
+  export WT_BRANCH
+  run_hook wt_post_clone || return 1
+}
+
+main() {
+  local command="${1:-}"
+  case "$command" in
+    init)
+      [[ $# == 2 ]] || {
+        usage >&2
+        return 1
+      }
+      init "$2"
+      ;;
+    clone)
+      [[ $# == 2 ]] || {
+        usage >&2
+        return 1
+      }
+      clone "$2"
+      ;;
+    list)
+      [[ $# == 1 ]] || {
+        usage >&2
+        return 1
+      }
+      load_repo
+      git_root worktree list
+      ;;
+    rm)
+      shift
+      load_repo
+      case "$#" in
+        0) remove_picked "" ;;
+        1)
+          if [[ "$1" == --force ]]; then remove_picked --force; else remove_worktree "$1" ""; fi
+          ;;
+        2)
+          [[ "$2" == --force ]] || {
+            usage >&2
+            return 1
+          }
+          remove_worktree "$1" --force
+          ;;
+        *)
+          usage >&2
+          return 1
+          ;;
+      esac
+      ;;
+    "")
+      load_repo
+      fetch_origin
+      command -v fzf >/dev/null 2>&1 || {
+        printf 'fzf is not installed.\n' >&2
+        return 1
+      }
+      local branch
+      branch="$(pick_branch)" || return 0
+      [[ -n "$branch" ]] && add_worktree "$branch"
+      ;;
+    *)
+      [[ $# == 1 ]] || {
+        usage >&2
+        return 1
+      }
+      load_repo
+      fetch_origin
+      add_worktree "$command"
+      ;;
+  esac
+}
+
+main "$@"
