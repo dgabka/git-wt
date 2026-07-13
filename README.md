@@ -43,9 +43,10 @@ Repository directories are configured in `${XDG_CONFIG_HOME:-$HOME/.config}/wt/c
 [wt]
     reposDir = ~/repos/personal
     reposDir = ~/repos/work
+    hooksFile = ~/dotfiles/wt-hooks
 ```
 
-`wt init` and `wt clone` always use `fzf` to choose between the configured directories and `here`, which means the current directory. Without any `reposDir` entries, `$HOME/repos` is offered instead.
+`wt init` and `wt clone` always use `fzf` to choose between the configured directories and `here`, which means the current directory. Without any `reposDir` entries, `$HOME/repos` is offered instead. `hooksFile` defaults to `${XDG_CONFIG_HOME:-$HOME/.config}/wt/hooks`.
 
 ## Hooks
 

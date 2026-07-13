@@ -16,6 +16,12 @@ export PATH="$tmp/bin:$PATH"
 
 git config --file "$XDG_CONFIG_HOME/wt/config" --add wt.reposDir "$tmp/repos/first"
 git config --file "$XDG_CONFIG_HOME/wt/config" --add wt.reposDir "$tmp/repos/second"
+cat >"$tmp/hooks" <<'EOF'
+wt_post_init() {
+  touch "$WT_REPO_ROOT/hook-ran"
+}
+EOF
+git config --file "$XDG_CONFIG_HOME/wt/config" wt.hooksFile "$tmp/hooks"
 git init --initial-branch=main "$tmp/source" >/dev/null
 git -C "$tmp/source" config user.name test
 git -C "$tmp/source" config user.email test@example.com
@@ -29,3 +35,4 @@ FZF_CHOICE="$tmp/repos/second" "$wt" clone "$tmp/source"
 mkdir "$tmp/here"
 (cd "$tmp/here" && FZF_CHOICE=here "$wt" init local)
 [[ "$(git -C "$tmp/here/local.git" rev-parse --is-bare-repository)" == true ]]
+[[ -f "$tmp/here/local.git/hook-ran" ]]

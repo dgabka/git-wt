@@ -41,7 +41,19 @@ run_hook() {
 }
 
 load_hooks() {
-  local hooks="${XDG_CONFIG_HOME:-$HOME/.config}/wt/hooks"
+  local config="${XDG_CONFIG_HOME:-$HOME/.config}/wt/config"
+  local hooks="${XDG_CONFIG_HOME:-$HOME/.config}/wt/hooks" status
+  if [[ -f "$config" ]]; then
+    if hooks="$(git config --file "$config" --path --get wt.hooksFile)"; then
+      [[ -n "$hooks" && "$hooks" == /* ]] || {
+        printf 'wt.hooksFile must be an absolute path: %s\n' "$hooks" >&2
+        return 1
+      }
+    else
+      status=$?
+      (( status == 1 )) || return "$status"
+    fi
+  fi
   if [[ -f "$hooks" ]]; then source "$hooks"; fi
 }
 
