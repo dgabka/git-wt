@@ -45,6 +45,41 @@ load_hooks() {
   if [[ -f "$hooks" ]]; then source "$hooks"; fi
 }
 
+configured_repos_dirs() {
+  local config="${XDG_CONFIG_HOME:-$HOME/.config}/wt/config" dirs dir status
+  if [[ -f "$config" ]]; then
+    if dirs="$(git config --file "$config" --path --get-all wt.reposDir)"; then
+      while IFS= read -r dir; do
+        [[ -n "$dir" && "$dir" == /* ]] || {
+          printf 'wt.reposDir must be an absolute path: %s\n' "$dir" >&2
+          return 1
+        }
+        printf '%s\n' "$dir"
+      done <<<"$dirs"
+      return
+    else
+      status=$?
+      (( status == 1 )) || return "$status"
+    fi
+  fi
+  printf '%s/repos\n' "$HOME"
+}
+
+choose_repos_dir() {
+  command -v fzf >/dev/null 2>&1 || {
+    printf 'fzf is not installed.\n' >&2
+    return 1
+  }
+  local dirs selected
+  WT_REPOS_DIR=""
+  dirs="$(configured_repos_dirs)" || return 1
+  selected="$(printf 'here\n%s\n' "$dirs" | fzf --prompt='Repository directory > ')" || return 0
+  [[ -n "$selected" ]] || return 0
+  if [[ "$selected" == here ]]; then selected="$(pwd -P)"; fi
+  WT_REPOS_DIR="$selected"
+  export WT_REPOS_DIR
+}
+
 fetch_origin() {
   git_root fetch --prune origin
   git_root remote set-head origin --auto >/dev/null 2>&1 || true
@@ -180,7 +215,7 @@ init() {
     printf 'Repository name must not be empty.\n' >&2
     return 1
   }
-  root="$HOME/repos/$name.git"
+  root="$WT_REPOS_DIR/$name.git"
   WT_REPO_ROOT="$root"
   WT_REPO_NAME="$name"
   WT_BRANCH=""
@@ -188,7 +223,7 @@ init() {
   export WT_REPO_ROOT WT_REPO_NAME WT_BRANCH WT_WORKTREE_PATH
   load_hooks
   run_hook wt_pre_init || return 1
-  mkdir -p "$HOME/repos"
+  mkdir -p "$WT_REPOS_DIR"
   git init --bare "$root"
   run_hook wt_post_init
 }
@@ -207,7 +242,7 @@ clone() {
     printf 'Cannot determine repository name from: %s\n' "$url" >&2
     return 1
   }
-  root="$HOME/repos/$name.git"
+  root="$WT_REPOS_DIR/$name.git"
   WT_REPO_ROOT="$root"
   WT_REPO_NAME="$name"
   WT_BRANCH=""
@@ -215,7 +250,7 @@ clone() {
   export WT_REPO_ROOT WT_REPO_NAME WT_BRANCH WT_WORKTREE_PATH
   load_hooks
   run_hook wt_pre_clone || return 1
-  mkdir -p "$HOME/repos"
+  mkdir -p "$WT_REPOS_DIR"
   git clone --bare -- "$url" "$root"
   git_root config remote.origin.fetch '+refs/heads/*:refs/remotes/origin/*'
   fetch_origin
@@ -235,6 +270,8 @@ main() {
         usage >&2
         return 1
       }
+      choose_repos_dir || return 1
+      [[ -n "$WT_REPOS_DIR" ]] || return 0
       init "$2"
       ;;
     clone)
@@ -242,6 +279,8 @@ main() {
         usage >&2
         return 1
       }
+      choose_repos_dir || return 1
+      [[ -n "$WT_REPOS_DIR" ]] || return 0
       clone "$2"
       ;;
     list)
