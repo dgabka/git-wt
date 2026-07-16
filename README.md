@@ -36,7 +36,7 @@ wt rm                                # choose one or more worktrees to remove
 
 `wt init` and `wt clone` prompt for a repository directory. Worktrees live inside the selected bare repository and are named after their branches. Existing local or remote branches are checked out; new branches start from the remote default branch. `wt` fetches `origin` before selecting or creating a worktree.
 
-`wt rm` refuses to remove a dirty worktree. Pass `--force` to override that check:
+`wt rm` refuses to remove dirty worktrees, the bare repository's default branch, and branches not merged into their configured upstream (or `HEAD` when no upstream is configured). Pass `--force` to override these checks:
 
 ```sh
 wt rm feature/my-branch --force

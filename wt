@@ -178,15 +178,28 @@ linked_worktrees() {
 }
 
 remove_worktree() {
-  local branch="$1" force="$2" path
+  local branch="$1" force="$2" path default upstream
   path="$(worktree_for_branch "$branch")"
   [[ -n "$path" ]] || {
     printf 'No worktree found for branch: %s\n' "$branch" >&2
     return 1
   }
-  if [[ "$force" != --force && -n "$(git -C "$path" status --porcelain)" ]]; then
-    printf 'Worktree is dirty: %s (use --force)\n' "$path" >&2
-    return 1
+  if [[ "$force" != --force ]]; then
+    if [[ -n "$(git -C "$path" status --porcelain)" ]]; then
+      printf 'Worktree is dirty: %s (use --force)\n' "$path" >&2
+      return 1
+    fi
+    default="$(git_root symbolic-ref --quiet --short HEAD 2>/dev/null || true)"
+    if [[ "$branch" == "$default" ]]; then
+      printf 'Branch is the default branch: %s (use --force)\n' "$branch" >&2
+      return 1
+    fi
+    upstream="$(git_root for-each-ref --format='%(upstream)' "refs/heads/$branch")"
+    [[ -n "$upstream" ]] || upstream=HEAD
+    if ! git_root merge-base --is-ancestor "$branch" "$upstream"; then
+      printf 'Branch is not merged into %s: %s (use --force)\n' "$upstream" "$branch" >&2
+      return 1
+    fi
   fi
 
   WT_BRANCH="$branch"
@@ -195,10 +208,11 @@ remove_worktree() {
   run_hook wt_pre_rm || return 1
   if [[ "$force" == --force ]]; then
     git_root worktree remove --force "$path" || return 1
+    git_root branch -D "$branch" || return 1
   else
     git_root worktree remove "$path" || return 1
+    git_root branch -d "$branch" || return 1
   fi
-  git_root branch -D "$branch" || return 1
   run_hook wt_post_rm || return 1
 }
 

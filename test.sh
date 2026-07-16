@@ -53,6 +53,8 @@ remote_path="$(cd "$repo" && "$wt" feature/remote | tail -n 1)"
 [[ "$remote_path" == "$repo/feature/remote" ]]
 [[ "$(git -C "$remote_path" config --get branch.feature/remote.remote)" == origin ]]
 [[ "$(git -C "$remote_path" config --get branch.feature/remote.merge)" == refs/heads/feature/remote ]]
+git -C "$repo" config user.name test
+git -C "$repo" config user.email test@example.com
 
 touch "$local_path/dirty"
 if (cd "$repo" && "$wt" rm feature/local); then
@@ -64,6 +66,30 @@ git -C "$repo" show-ref --verify --quiet refs/heads/feature/local
 [[ ! -e "$local_path" ]]
 if git -C "$repo" show-ref --verify --quiet refs/heads/feature/local; then exit 1; fi
 
+unmerged_path="$(cd "$repo" && "$wt" feature/unmerged | tail -n 1)"
+printf 'unmerged\n' >"$unmerged_path/unmerged"
+git -C "$unmerged_path" add unmerged
+git -C "$unmerged_path" commit -m unmerged >/dev/null
+if (cd "$repo" && "$wt" rm feature/unmerged); then
+  exit 1
+fi
+[[ -d "$unmerged_path" ]]
+git -C "$repo" show-ref --verify --quiet refs/heads/feature/unmerged
+(cd "$repo" && "$wt" rm feature/unmerged --force)
+[[ ! -e "$unmerged_path" ]]
+if git -C "$repo" show-ref --verify --quiet refs/heads/feature/unmerged; then exit 1; fi
+
+main_path="$(cd "$repo" && "$wt" main | tail -n 1)"
+if (cd "$repo" && "$wt" rm main); then
+  exit 1
+fi
+[[ -d "$main_path" ]]
+git -C "$repo" show-ref --verify --quiet refs/heads/main
+
+(cd "$repo" && "$wt" rm feature/remote)
+[[ ! -e "$remote_path" ]]
+if git -C "$repo" show-ref --verify --quiet refs/heads/feature/remote; then exit 1; fi
+
 cat >"$tmp/expected-hooks" <<EOF
 post-init  $tmp/here/local.git
 pre-add feature/local $repo/feature/local
@@ -72,5 +98,13 @@ pre-add feature/remote $repo/feature/remote
 post-add feature/remote $repo/feature/remote
 pre-rm feature/local $repo/feature/local
 post-rm feature/local $repo/feature/local
+pre-add feature/unmerged $repo/feature/unmerged
+post-add feature/unmerged $repo/feature/unmerged
+pre-rm feature/unmerged $repo/feature/unmerged
+post-rm feature/unmerged $repo/feature/unmerged
+pre-add main $repo/main
+post-add main $repo/main
+pre-rm feature/remote $repo/feature/remote
+post-rm feature/remote $repo/feature/remote
 EOF
 diff -u "$tmp/expected-hooks" "$TEST_HOOK_LOG"
