@@ -62,7 +62,7 @@ fi
 git -C "$repo" show-ref --verify --quiet refs/heads/feature/local
 (cd "$repo" && "$wt" rm feature/local --force)
 [[ ! -e "$local_path" ]]
-! git -C "$repo" show-ref --verify --quiet refs/heads/feature/local
+if git -C "$repo" show-ref --verify --quiet refs/heads/feature/local; then exit 1; fi
 
 cat >"$tmp/expected-hooks" <<EOF
 post-init  $tmp/here/local.git
