@@ -14,6 +14,13 @@ A small CLI for managing Git worktrees from a bare repository.
 install -m 755 wt ~/.local/bin/wt
 ```
 
+### Nix
+
+```sh
+nix profile install .  # install from a checkout
+nix develop            # Bash, Git, fzf, ShellCheck, and shfmt
+```
+
 ## Usage
 
 ```sh
