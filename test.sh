@@ -7,9 +7,12 @@ trap 'rm -rf "$tmp"' EXIT
 export HOME="$tmp/home"
 export XDG_CONFIG_HOME="$tmp/config"
 export TEST_HOOK_LOG="$tmp/hooks.log"
+export TEST_HOOK_DIRS="$tmp/hook-dirs.log"
+export FZF_LOG="$tmp/fzf.log"
 mkdir -p "$tmp/bin" "$XDG_CONFIG_HOME/wt"
 cat >"$tmp/bin/fzf" <<'EOF'
 #!/usr/bin/env bash
+printf '%s\n' "$*" >>"$FZF_LOG"
 grep -Fx "$FZF_CHOICE"
 EOF
 chmod +x "$tmp/bin/fzf"
@@ -21,7 +24,8 @@ cat >"$tmp/hooks" <<'EOF'
 log_hook() {
   printf '%s %s %s\n' "$1" "$WT_BRANCH" "$WT_WORKTREE_PATH" >>"$TEST_HOOK_LOG"
 }
-wt_post_init() { log_hook post-init; }
+wt_post_init() { log_hook post-init; printf 'init %s\n' "$WT_REPOS_DIR" >>"$TEST_HOOK_DIRS"; }
+wt_pre_clone() { printf 'clone %s\n' "$WT_REPOS_DIR" >>"$TEST_HOOK_DIRS"; }
 wt_pre_add() { log_hook pre-add; }
 wt_post_add() { log_hook post-add; }
 wt_pre_rm() { log_hook pre-rm; }
@@ -42,6 +46,26 @@ repo="$tmp/repos/second/source.git"
 mkdir "$tmp/here"
 (cd "$tmp/here" && FZF_CHOICE=here "$wt" init local)
 [[ "$(git -C "$tmp/here/local.git" rev-parse --is-bare-repository)" == true ]]
+
+fzf_calls="$(wc -l <"$FZF_LOG")"
+"$wt" init spaced --dir "$tmp/repos with spaces"
+[[ "$(git -C "$tmp/repos with spaces/spaced.git" rev-parse --is-bare-repository)" == true ]]
+mkdir "$tmp/clone-caller"
+(cd "$tmp/clone-caller" && "$wt" clone ../source --dir 'relative repos')
+[[ "$(git -C "$tmp/clone-caller/relative repos/source.git" rev-parse --is-bare-repository)" == true ]]
+[[ "$(wc -l <"$FZF_LOG")" == "$fzf_calls" ]]
+cat >"$tmp/expected-hook-dirs" <<EOF
+clone $tmp/repos/second
+init $tmp/here
+init $tmp/repos with spaces
+clone $tmp/clone-caller/relative repos
+EOF
+diff -u "$tmp/expected-hook-dirs" "$TEST_HOOK_DIRS"
+if "$wt" init invalid --dir; then exit 1; fi
+if "$wt" clone "$tmp/source" --unknown "$tmp/invalid"; then exit 1; fi
+if "$wt" init invalid --dir -invalid; then exit 1; fi
+if "$wt" clone "$tmp/source" --dir "$tmp/invalid" extra; then exit 1; fi
+[[ "$(wc -l <"$FZF_LOG")" == "$fzf_calls" ]]
 
 local_path="$(cd "$repo" && "$wt" feature/local | tail -n 1)"
 [[ "$local_path" == "$repo/feature/local" ]]
@@ -92,6 +116,7 @@ if git -C "$repo" show-ref --verify --quiet refs/heads/feature/remote; then exit
 
 cat >"$tmp/expected-hooks" <<EOF
 post-init  $tmp/here/local.git
+post-init  $tmp/repos with spaces/spaced.git
 pre-add feature/local $repo/feature/local
 post-add feature/local $repo/feature/local
 pre-add feature/remote $repo/feature/remote

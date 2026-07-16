@@ -25,7 +25,9 @@ nix develop            # Bash, Git, fzf, ShellCheck, and shfmt
 
 ```sh
 wt init my-repo                         # choose where to create my-repo.git
+wt init my-repo --dir ~/repos/work      # create in a fixed directory
 wt clone git@github.com:owner/repo.git  # choose where to clone repo.git
+wt clone git@github.com:owner/repo.git --dir ~/repos/work
 cd ~/repos/repo.git/main
 wt                                  # choose an unchecked-out branch with fzf
 wt feature/my-branch                # create or open a worktree
@@ -34,7 +36,7 @@ wt rm feature/my-branch             # remove its worktree and local branch
 wt rm                                # choose one or more worktrees to remove
 ```
 
-`wt init` and `wt clone` prompt for a repository directory. Worktrees live inside the selected bare repository and are named after their branches. Existing local or remote branches are checked out; new branches start from the remote default branch. `wt` fetches `origin` before selecting or creating a worktree.
+`wt init` and `wt clone` prompt for a repository directory unless given `--dir <path>`. Relative `--dir` paths are resolved from the physical current directory before hooks run. Worktrees live inside the selected bare repository and are named after their branches. Existing local or remote branches are checked out; new branches start from the remote default branch. `wt` fetches `origin` before selecting or creating a worktree.
 
 `wt rm` refuses to remove dirty worktrees, the bare repository's default branch, and branches not merged into their configured upstream (or `HEAD` when no upstream is configured). Pass `--force` to override these checks:
 
@@ -53,7 +55,7 @@ Repository directories are configured in `${XDG_CONFIG_HOME:-$HOME/.config}/wt/c
     hooksFile = ~/dotfiles/wt-hooks
 ```
 
-`wt init` and `wt clone` always use `fzf` to choose between the configured directories and `here`, which means the current directory. Without any `reposDir` entries, `$HOME/repos` is offered instead. `hooksFile` defaults to `${XDG_CONFIG_HOME:-$HOME/.config}/wt/hooks`.
+Without `--dir`, `wt init` and `wt clone` use `fzf` to choose between the configured directories and `here`, which means the current directory. Without any `reposDir` entries, `$HOME/repos` is offered instead. `hooksFile` defaults to `${XDG_CONFIG_HOME:-$HOME/.config}/wt/hooks`.
 
 ## Hooks
 

@@ -5,8 +5,8 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage:
-  wt init <name>
-  wt clone <repo-url>
+  wt init <name> [--dir <path>]
+  wt clone <repo-url> [--dir <path>]
   wt [<branch>]
   wt list
   wt rm [<branch>] [--force]
@@ -89,6 +89,24 @@ choose_repos_dir() {
   [[ -n "$selected" ]] || return 0
   if [[ "$selected" == here ]]; then selected="$(pwd -P)"; fi
   WT_REPOS_DIR="$selected"
+  export WT_REPOS_DIR
+}
+
+set_repos_dir() {
+  local dir="$1"
+  [[ -n "$dir" ]] || {
+    printf 'Repository directory must not be empty.\n' >&2
+    return 1
+  }
+  [[ "$dir" != -* ]] || {
+    printf 'Repository directory must not begin with -: %s\n' "$dir" >&2
+    return 1
+  }
+  if [[ "$dir" == /* ]]; then
+    WT_REPOS_DIR="$dir"
+  else
+    WT_REPOS_DIR="$(pwd -P)/$dir"
+  fi
   export WT_REPOS_DIR
 }
 
@@ -291,23 +309,25 @@ clone() {
 main() {
   local command="${1:-}"
   case "$command" in
-    init)
-      [[ $# == 2 ]] || {
-        usage >&2
-        return 1
-      }
-      choose_repos_dir || return 1
-      [[ -n "$WT_REPOS_DIR" ]] || return 0
-      init "$2"
-      ;;
-    clone)
-      [[ $# == 2 ]] || {
-        usage >&2
-        return 1
-      }
-      choose_repos_dir || return 1
-      [[ -n "$WT_REPOS_DIR" ]] || return 0
-      clone "$2"
+    init|clone)
+      case "$#" in
+        2)
+          choose_repos_dir || return 1
+          [[ -n "$WT_REPOS_DIR" ]] || return 0
+          ;;
+        4)
+          [[ "$3" == --dir ]] || {
+            usage >&2
+            return 1
+          }
+          set_repos_dir "$4" || return 1
+          ;;
+        *)
+          usage >&2
+          return 1
+          ;;
+      esac
+      "$command" "$2"
       ;;
     list)
       [[ $# == 1 ]] || {
