@@ -2,6 +2,8 @@
 
 A small CLI for managing Git worktrees from a bare repository.
 
+`git-wt` keeps one bare clone as the repository hub and creates a branch-named checkout inside it for each worktree. Use it to work on several branches at once without repeatedly stashing or switching your main checkout.
+
 ## Requirements
 
 - Git
