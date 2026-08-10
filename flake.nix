@@ -19,8 +19,13 @@
             version = "0.1.0";
             src = ./.;
             dontBuild = true;
+            nativeBuildInputs = [ pkgs.makeWrapper ];
             installPhase = ''
               install -Dm755 $src/wt $out/bin/wt
+            '';
+            postFixup = ''
+              wrapProgram $out/bin/wt \
+                --prefix PATH : ${pkgs.lib.makeBinPath [ pkgs.bash pkgs.git pkgs.fzf ]}
             '';
           };
           default = self.packages.${system}.wt;

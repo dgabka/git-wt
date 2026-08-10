@@ -8,18 +8,21 @@ A small CLI for managing Git worktrees from a bare repository.
 
 - Git
 - Bash
-- [fzf](https://github.com/junegunn/fzf) for interactive branch selection
+- [fzf](https://github.com/junegunn/fzf) for interactive directory, branch, and worktree selection
 
 ## Install
 
 ```sh
+mkdir -p ~/.local/bin
 install -m 755 wt ~/.local/bin/wt
 ```
+
+Ensure `~/.local/bin` is on your `PATH`.
 
 ### Nix
 
 ```sh
-nix profile install .  # install from a checkout
+nix profile install .  # install a runnable wt from this checkout
 nix develop            # Bash, Git, fzf, ShellCheck, and shfmt
 ```
 
