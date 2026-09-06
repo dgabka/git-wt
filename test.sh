@@ -133,3 +133,27 @@ pre-rm feature/remote $repo/feature/remote
 post-rm feature/remote $repo/feature/remote
 EOF
 diff -u "$tmp/expected-hooks" "$TEST_HOOK_LOG"
+
+# Bash completion offers commands, branches, and only linked branches for removal.
+# shellcheck source=completions/wt.bash
+source "$(dirname "$wt")/completions/wt.bash"
+COMP_WORDS=(wt r)
+COMP_CWORD=1
+_wt
+printf '%s\n' "${COMPREPLY[@]}" | grep -qx rm
+COMP_WORDS=(wt init name --dir "$tmp/repos w")
+COMP_CWORD=4
+_wt
+printf '%s\n' "${COMPREPLY[@]}" | grep -qx "$tmp/repos with spaces"
+(
+  cd "$repo"
+  COMP_WORDS=(wt feature/r)
+  COMP_CWORD=1
+  _wt
+  printf '%s\n' "${COMPREPLY[@]}" | grep -qx feature/remote
+  COMP_WORDS=(wt rm '')
+  COMP_CWORD=2
+  _wt
+  printf '%s\n' "${COMPREPLY[@]}" | grep -qx main
+  if printf '%s\n' "${COMPREPLY[@]}" | grep -qx feature/remote; then exit 1; fi
+)

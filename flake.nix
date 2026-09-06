@@ -22,6 +22,8 @@
             nativeBuildInputs = [ pkgs.makeWrapper ];
             installPhase = ''
               install -Dm755 $src/wt $out/bin/wt
+              install -Dm644 $src/completions/wt.bash $out/share/bash-completion/completions/wt
+              install -Dm644 $src/completions/_wt $out/share/zsh/site-functions/_wt
             '';
             postFixup = ''
               wrapProgram $out/bin/wt \
@@ -35,7 +37,7 @@
         let pkgs = import nixpkgs { inherit system; };
         in {
           default = pkgs.mkShell {
-            packages = with pkgs; [ bash git fzf shellcheck shfmt ];
+            packages = with pkgs; [ bash git fzf shellcheck shfmt zsh ];
           };
         });
     };

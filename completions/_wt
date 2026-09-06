@@ -1,0 +1,56 @@
+#compdef wt
+
+_wt_branch_names() {
+  local git_dir ref
+  git_dir=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return
+  git --git-dir="$git_dir" for-each-ref --format='%(refname)' refs/heads refs/remotes/origin |
+    while IFS= read -r ref; do
+      case "$ref" in
+        refs/heads/*) print -r -- "${ref#refs/heads/}" ;;
+        refs/remotes/origin/HEAD) ;;
+        refs/remotes/origin/*) print -r -- "${ref#refs/remotes/origin/}" ;;
+      esac
+    done | sort -u
+}
+
+_wt_linked_branch_names() {
+  local git_dir
+  git_dir=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return
+  git --git-dir="$git_dir" worktree list --porcelain |
+    awk '$1 == "branch" { sub("refs/heads/", "", $2); print $2 }'
+}
+
+_wt() {
+  local -a commands
+  commands=(
+    'init:create a bare repository'
+    'clone:clone a bare repository'
+    'list:list worktrees'
+    'rm:remove a worktree and branch'
+  )
+
+  if (( CURRENT == 2 )); then
+    _describe 'command' commands
+    compadd -- ${(f)"$(_wt_branch_names)"}
+    return
+  fi
+
+  case "$words[2]" in
+    init|clone)
+      if [[ "$words[CURRENT-1]" == --dir ]]; then
+        _directories
+      elif (( CURRENT == 4 )); then
+        compadd -- --dir
+      fi
+      ;;
+    rm)
+      if (( CURRENT == 3 )); then
+        compadd -- --force ${(f)"$(_wt_linked_branch_names)"}
+      elif (( CURRENT == 4 )) && [[ "$words[3]" != --force ]]; then
+        compadd -- --force
+      fi
+      ;;
+  esac
+}
+
+_wt

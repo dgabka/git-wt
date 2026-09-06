@@ -19,11 +19,23 @@ install -m 755 wt ~/.local/bin/wt
 
 Ensure `~/.local/bin` is on your `PATH`.
 
+Optional shell completions:
+
+```sh
+# Bash (loaded automatically by bash-completion)
+install -Dm644 completions/wt.bash ~/.local/share/bash-completion/completions/wt
+
+# Zsh
+install -Dm644 completions/_wt ~/.local/share/zsh/site-functions/_wt
+# Add this once to ~/.zshrc if the directory is not already in $fpath:
+fpath=(~/.local/share/zsh/site-functions $fpath)
+```
+
 ### Nix
 
 ```sh
-nix profile install .  # install a runnable wt from this checkout
-nix develop            # Bash, Git, fzf, ShellCheck, and shfmt
+nix profile install .  # install wt and its Bash/Zsh completions
+nix develop            # Bash, Zsh, Git, fzf, ShellCheck, and shfmt
 ```
 
 ## Usage
