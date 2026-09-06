@@ -18,6 +18,8 @@ EOF
 chmod +x "$tmp/bin/fzf"
 export PATH="$tmp/bin:$PATH"
 
+(cd "$tmp" && "$wt" --help) | grep -qx '  wt list'
+
 git config --file "$XDG_CONFIG_HOME/wt/config" --add wt.reposDir "$tmp/repos/first"
 git config --file "$XDG_CONFIG_HOME/wt/config" --add wt.reposDir "$tmp/repos/second"
 cat >"$tmp/hooks" <<'EOF'

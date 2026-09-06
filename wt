@@ -309,6 +309,13 @@ clone() {
 main() {
   local command="${1:-}"
   case "$command" in
+    -h|--help)
+      [[ $# == 1 ]] || {
+        usage >&2
+        return 1
+      }
+      usage
+      ;;
     init|clone)
       case "$#" in
         2)
