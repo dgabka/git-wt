@@ -30,8 +30,8 @@ wt_post_init() { log_hook post-init; printf 'init %s\n' "$WT_REPOS_DIR" >>"$TEST
 wt_pre_clone() { printf 'clone %s\n' "$WT_REPOS_DIR" >>"$TEST_HOOK_DIRS"; }
 wt_pre_add() { log_hook pre-add; }
 wt_post_add() { log_hook post-add; }
-wt_pre_rm() { log_hook pre-rm; }
-wt_post_rm() { log_hook post-rm; }
+wt_pre_rm() { log_hook pre-rm; if [[ -n "${TEST_HOOK_CWDS:-}" ]]; then pwd -P >>"$TEST_HOOK_CWDS"; fi; }
+wt_post_rm() { log_hook post-rm; if [[ -n "${TEST_HOOK_CWDS:-}" ]]; then pwd -P >>"$TEST_HOOK_CWDS"; fi; }
 EOF
 git config --file "$XDG_CONFIG_HOME/wt/config" wt.hooksFile "$tmp/hooks"
 git init --initial-branch=main "$tmp/source" >/dev/null
@@ -116,6 +116,50 @@ git -C "$repo" show-ref --verify --quiet refs/heads/main
 [[ ! -e "$remote_path" ]]
 if git -C "$repo" show-ref --verify --quiet refs/heads/feature/remote; then exit 1; fi
 
+current_path="$(cd "$repo" && "$wt" feature/current | tail -n 1)"
+mkdir "$current_path/nested"
+export TEST_HOOK_CWDS="$tmp/current-hook-cwds"
+(cd "$current_path/nested" && "$wt" rm --current)
+unset TEST_HOOK_CWDS
+[[ ! -e "$current_path" ]]
+if git -C "$repo" show-ref --verify --quiet refs/heads/feature/current; then exit 1; fi
+grep -qx "$repo" "$tmp/current-hook-cwds"
+[[ "$(wc -l <"$tmp/current-hook-cwds")" == 2 ]]
+grep -qx "pre-rm feature/current $current_path" "$TEST_HOOK_LOG"
+grep -qx "post-rm feature/current $current_path" "$TEST_HOOK_LOG"
+
+current_dirty_path="$(cd "$repo" && "$wt" feature/current-dirty | tail -n 1)"
+touch "$current_dirty_path/dirty"
+if (cd "$current_dirty_path" && "$wt" rm --current); then exit 1; fi
+[[ -d "$current_dirty_path" ]]
+(cd "$current_dirty_path" && "$wt" rm --current --force)
+[[ ! -e "$current_dirty_path" ]]
+if git -C "$repo" show-ref --verify --quiet refs/heads/feature/current-dirty; then exit 1; fi
+
+current_unmerged_path="$(cd "$repo" && "$wt" feature/current-unmerged | tail -n 1)"
+printf 'unmerged\n' >"$current_unmerged_path/current-unmerged"
+git -C "$current_unmerged_path" add current-unmerged
+git -C "$current_unmerged_path" commit -m current-unmerged >/dev/null
+if (cd "$current_unmerged_path" && "$wt" rm --current); then exit 1; fi
+[[ -d "$current_unmerged_path" ]]
+(cd "$current_unmerged_path" && "$wt" rm --current --force)
+
+if (cd "$main_path" && "$wt" rm --current); then exit 1; fi
+[[ -d "$main_path" ]]
+if (cd "$repo" && "$wt" rm --current); then exit 1; fi
+
+git -C "$repo" worktree add --detach "$repo/detached" HEAD >/dev/null
+if (cd "$repo/detached" && "$wt" rm --current); then exit 1; fi
+[[ -d "$repo/detached" ]]
+git -C "$repo" worktree remove --force "$repo/detached"
+
+if (cd "$repo" && "$wt" rm main --current); then exit 1; fi
+if (cd "$repo" && "$wt" rm --force --current); then exit 1; fi
+if (cd "$repo" && "$wt" rm --current --current); then exit 1; fi
+if (cd "$repo" && "$wt" rm --current --force extra); then exit 1; fi
+[[ -d "$main_path" ]]
+git -C "$repo" show-ref --verify --quiet refs/heads/main
+
 cat >"$tmp/expected-hooks" <<EOF
 post-init  $tmp/here/local.git
 post-init  $tmp/repos with spaces/spaced.git
@@ -133,6 +177,18 @@ pre-add main $repo/main
 post-add main $repo/main
 pre-rm feature/remote $repo/feature/remote
 post-rm feature/remote $repo/feature/remote
+pre-add feature/current $repo/feature/current
+post-add feature/current $repo/feature/current
+pre-rm feature/current $repo/feature/current
+post-rm feature/current $repo/feature/current
+pre-add feature/current-dirty $repo/feature/current-dirty
+post-add feature/current-dirty $repo/feature/current-dirty
+pre-rm feature/current-dirty $repo/feature/current-dirty
+post-rm feature/current-dirty $repo/feature/current-dirty
+pre-add feature/current-unmerged $repo/feature/current-unmerged
+post-add feature/current-unmerged $repo/feature/current-unmerged
+pre-rm feature/current-unmerged $repo/feature/current-unmerged
+post-rm feature/current-unmerged $repo/feature/current-unmerged
 EOF
 diff -u "$tmp/expected-hooks" "$TEST_HOOK_LOG"
 

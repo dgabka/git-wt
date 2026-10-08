@@ -10,6 +10,7 @@ Usage:
   wt [<branch>]
   wt list
   wt rm [<branch>] [--force]
+  wt rm --current [--force]
 EOF
 }
 
@@ -234,6 +235,32 @@ remove_worktree() {
   run_hook wt_post_rm || return 1
 }
 
+remove_current_worktree() {
+  local force="$1" path branch registered
+  [[ "$(git rev-parse --is-inside-work-tree 2>/dev/null || true)" == true ]] || {
+    printf 'Not inside a worktree.\n' >&2
+    return 1
+  }
+  path="$(git rev-parse --show-toplevel)"
+  path="$(cd "$path" && pwd -P)"
+  branch="$(git symbolic-ref --quiet --short HEAD)" || {
+    printf 'Current worktree has detached HEAD.\n' >&2
+    return 1
+  }
+  registered="$(worktree_for_branch "$branch")"
+  [[ -n "$registered" ]] || {
+    printf 'No worktree found for branch: %s\n' "$branch" >&2
+    return 1
+  }
+  registered="$(cd "$registered" && pwd -P)"
+  [[ "$path" == "$registered" ]] || {
+    printf 'Current worktree does not match branch registration: %s\n' "$branch" >&2
+    return 1
+  }
+  cd "$WT_REPO_ROOT"
+  remove_worktree "$branch" "$force"
+}
+
 remove_picked() {
   command -v fzf >/dev/null 2>&1 || {
     printf 'fzf is not installed.\n' >&2
@@ -350,14 +377,23 @@ main() {
       case "$#" in
         0) remove_picked "" ;;
         1)
-          if [[ "$1" == --force ]]; then remove_picked --force; else remove_worktree "$1" ""; fi
+          if [[ "$1" == --force ]]; then
+            remove_picked --force
+          elif [[ "$1" == --current ]]; then
+            remove_current_worktree ""
+          else
+            remove_worktree "$1" ""
+          fi
           ;;
         2)
-          [[ "$2" == --force ]] || {
+          if [[ "$1" == --current && "$2" == --force ]]; then
+            remove_current_worktree --force
+          elif [[ "$2" == --force && "$1" != --current ]]; then
+            remove_worktree "$1" --force
+          else
             usage >&2
             return 1
-          }
-          remove_worktree "$1" --force
+          fi
           ;;
         *)
           usage >&2
