@@ -32,8 +32,10 @@ mv "$tmp" flake.nix
 
 ./test.sh
 nix build --no-link .#wt
-git add flake.nix
-git commit -m "chore: release $tag"
+if ! git diff --quiet -- flake.nix; then
+  git add flake.nix
+  git commit -m "chore: release $tag"
+fi
 git tag -a "$tag" -m "$tag"
 
 echo "created $tag; publish with: git push origin HEAD $tag"
