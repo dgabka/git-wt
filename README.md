@@ -50,6 +50,8 @@ wt                                  # choose an unchecked-out branch with fzf
 wt feature/my-branch                # create or open a worktree
 wt list                             # list worktrees
 wt rm feature/my-branch             # remove its worktree and local branch
+wt rm --current                      # remove the containing worktree and branch
+wt rm --current --force              # override removal safeguards
 wt rm                                # choose one or more worktrees to remove
 ```
 
@@ -60,6 +62,8 @@ wt rm                                # choose one or more worktrees to remove
 ```sh
 wt rm feature/my-branch --force
 ```
+
+`wt rm --current` resolves the linked worktree containing the caller and uses the same safeguards. After it succeeds, the parent shell still points at the removed directory; run `cd` to move to an existing directory.
 
 ## Configuration
 
