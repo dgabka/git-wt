@@ -45,7 +45,7 @@ _wt() {
       ;;
     rm)
       if (( CURRENT == 3 )); then
-        compadd -- --force ${(f)"$(_wt_linked_branch_names)"}
+        compadd -- --current --force ${(f)"$(_wt_linked_branch_names)"}
       elif (( CURRENT == 4 )) && [[ "$words[3]" != --force ]]; then
         compadd -- --force
       fi

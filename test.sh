@@ -213,5 +213,10 @@ printf '%s\n' "${COMPREPLY[@]}" | grep -qx "$tmp/repos with spaces"
   COMP_CWORD=2
   _wt
   printf '%s\n' "${COMPREPLY[@]}" | grep -qx main
+  printf '%s\n' "${COMPREPLY[@]}" | grep -qx -- --current
   if printf '%s\n' "${COMPREPLY[@]}" | grep -qx feature/remote; then exit 1; fi
+  COMP_WORDS=(wt rm --current '')
+  COMP_CWORD=3
+  _wt
+  [[ "${COMPREPLY[*]}" == --force ]]
 )

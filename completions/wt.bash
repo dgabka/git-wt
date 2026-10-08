@@ -50,7 +50,7 @@ _wt() {
       ;;
     rm)
       if (( COMP_CWORD == 2 )); then
-        _wt_complete -W "$(_wt_linked_branches) --force" -- "$cur"
+        _wt_complete -W "$(_wt_linked_branches) --current --force" -- "$cur"
       elif (( COMP_CWORD == 3 )) && [[ "${COMP_WORDS[2]}" != --force ]]; then
         _wt_complete -W --force -- "$cur"
       fi
